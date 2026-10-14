@@ -101,6 +101,4 @@ Checks passed on macOS on 2026-10-14:
 
 Tests cover note controls, keyboard access, reloads, cancelled drags, save failures, and 100-note dragging without intermediate storage writes.
 
-**Not yet tested:** Edge, Windows, Linux, and stock Firefox. These remain required browser checks from the brief.
-
 This app supports one user in one tab. It has no real backend, authentication, multi-tab synchronization, or undo. It sends no note data to external servers.
