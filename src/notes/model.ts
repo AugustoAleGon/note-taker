@@ -159,7 +159,7 @@ export function parseSnapshot(value: unknown): Snapshot | null {
       zIndex: n.zIndex as number,
     });
   }
-  // Normalize external stacking values without changing DOM order.
+  // Keep DOM order when normalizing z-index values.
   const order = [...notes].sort((a, b) => a.zIndex - b.zIndex);
   const ranks = new Map(order.map((note, index) => [note.id, index]));
   return snapshot(

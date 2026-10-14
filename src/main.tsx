@@ -4,9 +4,9 @@ import "./index.css";
 import App from "./App";
 import { createApi } from "./notes/api";
 
-// The exercise deliberately ships its mock in preview builds as well as development.
+// Run the mock in development and preview.
 const ready = import("./mocks/browser").then((module) => module.startMockApi());
-// Handle startup rejection immediately; requests still receive the original error.
+// Prevent an unhandled rejection. API requests still receive the error.
 void ready.catch(() => {});
 const api = createApi(ready);
 createRoot(document.getElementById("root")!).render(

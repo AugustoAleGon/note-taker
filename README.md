@@ -1,74 +1,74 @@
 # Little notes
 
-A desktop sticky-note board built with React, TypeScript, and native browser interactions. It implements all four core requirements and all five optional features from the Sticky Notes exercise. The UI, drag logic, and resize logic are custom; there are no stock component or drag-and-drop libraries.
+A desktop sticky-note app built with React and TypeScript. It includes all four core features and all five bonuses from the exercise. The UI, dragging, and resizing use custom code.
 
-## Run locally
+## Run
 
-Requires Node.js 22.12 or newer and pnpm 10.12.1. The implementation was verified with Node.js 22.16.0.
+Use Node.js 22.12+ and pnpm 10.12.1. Development used Node.js 22.16.0.
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open the localhost URL printed by Vite. For a production build:
+Open the URL that Vite prints. To build and preview:
 
 ```sh
 pnpm build
 pnpm preview
 ```
 
-Use localhost or HTTPS: the mocked API requires a service worker. The API mock is deliberately included in both development and production preview. A real backend is not required. The board still works locally if the worker cannot start.
+Use localhost or HTTPS for the mock API's service worker. The mock runs in development and preview. Local editing still works if the worker fails.
 
-## Features and controls
+## Controls
 
-| Requirement                             | Implementation                                                                                                |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Create at a specified position and size | **New note** opens a numeric form; **Draw note** lets you drag a rectangle on empty board space.              |
-| Resize by dragging                      | Drag the bottom-right corner.                                                                                 |
-| Move by dragging                        | Drag the note header.                                                                                         |
-| Delete through a trash zone             | Release the pointer over **Let it go** while moving a note. Passing over the target alone does not delete it. |
-| Enter and edit text                     | Plain-text textarea, with selection, line breaks, and internal scrolling.                                     |
-| Bring notes to the front                | Interacting with or focusing a note raises it.                                                                |
-| Restore from local storage              | Committed changes are saved locally, including text, geometry, stacking, and colors.                          |
-| Different note colors                   | Yellow, pink, blue, and green, selectable per note.                                                           |
-| Save through an asynchronous REST API   | Debounced `fetch` requests intercepted by Mock Service Worker, with latency, status, and retry.               |
+| Action               | Control                                                                                  |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| Create               | Select **New note** for exact dimensions, or **Draw note** to draw on empty board space. |
+| Move                 | Drag the note header.                                                                    |
+| Resize               | Drag the bottom-right corner.                                                            |
+| Delete               | Release a dragged note over **Let it go**, or use its Delete button.                     |
+| Edit                 | Type in the note. Long text scrolls inside it.                                           |
+| Change color         | Use the note's color menu.                                                               |
+| Change overlap order | Click or focus a note to bring it to the front.                                          |
 
-Coordinates are whole pixels from the board's top-left corner. Default size is 240 × 200 px; minimum size is 160 × 120 px. Numeric forms reject invalid rectangles. Drawings normalize in any direction, grow to the minimum size when necessary, and stay inside the board; movements shorter than four pixels create nothing.
+**Position and size** provides keyboard controls for moving and resizing. Escape closes a dialog or cancels a drag. New notes receive text focus. Deletion returns focus to **New note**.
 
-**Position and size** on each note provides a keyboard-accessible alternative to moving and resizing. Tab reaches controls, Enter activates buttons, Escape closes a dialog or cancels drawing/dragging, and the per-note Delete button provides keyboard deletion. A newly created note receives text focus. Deleting returns focus to New note. Drawing mode ends after one gesture.
-
-Committed notes stay inside the board. Shrinking the viewport fits oversized notes and clamps positions; growing it preserves their current geometry. Escape, pointer cancellation, lost pointer capture, window blur, or a change to the board dimensions cancels an active gesture without committing its geometry. Bringing the note forward remains effective after cancellation.
+Coordinates start at the board's top-left corner. Notes default to 240 × 200 px, with a minimum of 160 × 120 px. Notes stay inside the board and adjust when the window shrinks. The minimum supported viewport is 1024 × 768.
 
 ## Architecture
 
-The note model and geometry module (`src/notes/model.ts`) contain the application's committed data, runtime snapshot validation, pure rectangle operations, and reducer. A note has a stable ID, plain text, color, pixel geometry, and a stacking index. The reducer preserves unchanged note references so memoized note views can avoid unnecessary rendering. React owns the committed state and ordinary UI, including dialogs, status, and focus; TypeScript strict checking is enabled. Snapshots contain only durable note data, not temporary gesture or dialog state.
+The model in `src/notes/model.ts` defines notes, checks stored data, and calculates geometry. A reducer updates note state. React renders the board and manages dialogs and focus. Strict TypeScript checks apply throughout the app.
 
-The gesture module (`src/notes/useGestures.ts`) owns pointer capture, cancellation, coordinate conversion, trash hit testing, and preview cleanup. Its discriminated gesture state separates drawing from operations on an existing note. Transient pointer data stays in refs, and preview styles update at most once per animation frame. React receives one geometry change on release, using the final pointer coordinates. Preview cleanup restores only geometry styles, preserving any stacking change made during interaction. Stable IDs and explicit z-index values avoid DOM reordering while dragging. Native textareas and controls preserve normal editing and keyboard behavior.
+The gesture hook handles drawing, moving, resizing, and cancellation through Pointer Events. Refs hold temporary positions. Drag previews update at most once per animation frame. On release, React receives the final geometry. Stable note IDs preserve DOM order while z-index controls overlap.
 
-The persistence module (`src/notes/persistence.ts`) accepts storage and transport dependencies and exposes start, save, retry, and dispose operations. It handles local recovery, write failures, debounce, request timeout, and ordered asynchronous saving behind that small interface. Only one API request runs at a time; pending edits coalesce into the latest snapshot. Revision tracking prevents stale responses from marking newer edits as saved, and disposal aborts requests and clears timers. The fetch transport validates responses, while MSW provides an independent in-memory mock server. This separation lets logic tests exercise failures and races without rendering React, and browser tests exercise the full user workflow.
+The persistence module handles local storage and API requests. Storage and transport dependencies allow tests without React. One request runs at a time, with pending edits combined into the latest snapshot. Older responses cannot overwrite new edits or mark them as saved. Mock Service Worker (MSW) supplies the asynchronous REST API.
 
-## Persistence and API contract
+## Saving
 
-Local storage uses `sticky-notes:v1`, containing `{ schemaVersion: 1, notes: [...] }`. Incoming snapshots must have valid IDs, plain text, supported colors, finite geometry, positive dimensions, and valid stacking values. Unsupported or malformed snapshots are rejected as a whole. Valid restored geometry is fitted to the current board. There is no earlier schema to migrate.
+Local storage saves note text, geometry, order, and colors under `sticky-notes:v1`. On startup, valid local data takes priority, including an empty board. Otherwise, the app loads from the API. Invalid stored data produces a warning.
 
-A valid local snapshot, including an empty board, takes precedence and is uploaded on startup. Without one, the app loads from the API. Late loading never replaces edits made while it was in flight. Local writes occur for committed changes; API saves debounce for 500 ms. Drag previews do not write to storage or trigger API saves. Requests time out after 10 seconds. Retry submits the latest snapshot, or retries initial loading if no snapshot exists.
+API saves wait 500 ms after a change. Drag previews do not trigger saves. Requests time out after 10 seconds. **Retry** submits the latest notes or retries initial loading.
 
-| Endpoint         | Behavior                                                                                                                                     |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/notes` | Returns the current versioned snapshot as JSON.                                                                                              |
-| `PUT /api/notes` | Validates and replaces the entire snapshot, returning the accepted snapshot; invalid input returns 400. Deletion is represented by omission. |
+| Endpoint         | Behavior                                                                                                    |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| `GET /api/notes` | Returns `{ schemaVersion: 1, notes: [...] }`.                                                               |
+| `PUT /api/notes` | Replaces the snapshot and returns it. Invalid data returns 400. Deleted notes are absent from the snapshot. |
 
-The mock adds 400 ms of latency. Its in-memory data resets on page reload; **local storage provides durable recovery**. It is a demonstration of REST saving, not remote backup or multi-device synchronization. If local storage is blocked, the UI warns that notes exist only in the current tab. Even a successful demo API save does not preserve them across reloads.
+The mock adds a 400 ms delay and resets on reload. **Local storage provides persistence.** If local storage fails, notes exist only in the current tab, even after a successful API save.
 
-To reproduce failures, append one of these query strings to the app URL:
+To test failures, append a query string to the app URL:
 
-- `?mockApi=fail-once`: the first PUT returns 503; Retry succeeds. The scenario resets on reload.
-- `?mockApi=offline`: GET and PUT return network errors; editing and available local storage continue working.
+- `?mockApi=fail-once`: the first save returns 503. Retry succeeds. Reloading resets the scenario.
+- `?mockApi=offline`: API requests fail. Editing and local saving remain available.
 
-Unrelated requests bypass MSW. The generated `public/mockServiceWorker.js` is committed; regenerate it with `pnpm exec msw init public --save` when upgrading MSW.
+After an MSW upgrade, regenerate its worker:
 
-## Verification
+```sh
+pnpm exec msw init public --save
+```
+
+## Tests
 
 ```sh
 pnpm lint
@@ -80,35 +80,23 @@ pnpm test:e2e
 pnpm test:e2e:preview
 ```
 
-The preview suite builds the app and uses port 4174; development tests use port 4173. Preview tests always start a fresh server. Browser traces are retained for failures under the ignored `test-results/` directory.
+Browser tests use port 4173 for development and 4174 for a fresh production preview. Failed tests retain traces in `test-results/`.
 
-Branded browser checks require those browsers to be installed:
+For installed Chrome or Edge browsers:
 
 ```sh
 pnpm exec playwright test --project=chrome
 pnpm exec playwright test --project=edge
-# Both installed:
-pnpm test:e2e:branded
 ```
 
-Logic tests cover rectangle normalization and bounds, numeric validation, stacking, snapshot validation, storage exceptions, debounce, in-flight edits, stale loading, retry, timeout, request cancellation, response validation, and mock startup failures. Browser tests cover both creation paths, editing, text selection and scrolling, colors, focus, overlapping notes, movement, resizing, trash deletion, cancellation, reloads, API failure/retry, inaccessible storage, viewport shrink, and 100-note dragging without intermediate storage writes.
+Checks passed on macOS on 2026-10-14:
 
-Visual checks use both 1440 × 900 and the minimum 1024 × 768 viewport. Supported targets are the latest desktop Chrome on Windows/macOS, Firefox on desktop platforms, and Edge. Below the minimum viewport, the workspace keeps its minimum dimensions and can be scrolled.
+- 23 logic tests and 30 production-browser tests across Chromium and Playwright Firefox.
+- The branded Chrome test, build, lint, and formatting checks.
+- Visual checks at 1024 × 768 and 1440 × 900.
 
-### Execution record
+Tests cover note controls, keyboard access, reloads, cancelled drags, save failures, and 100-note dragging without intermediate storage writes.
 
-Verified on macOS on 2026-10-14:
+**Not yet tested:** Edge, Windows, Linux, and stock Firefox. These remain required browser checks from the brief.
 
-- 23 logic tests passed.
-- All 30 production-preview browser checks passed across Chromium and Playwright Firefox, including the final stacking regression.
-- The branded Google Chrome check passed.
-- The strict TypeScript production build, ESLint, formatting check, and whitespace check passed.
-- Empty and populated boards were visually inspected at 1440 × 900 and 1024 × 768.
-
-Edge is not installed on this machine. Windows, Linux, and stock Firefox platform checks remain unexecuted; passing Chromium is not a claim that those combinations were tested.
-
-For remaining platform checks, run the browser projects above and manually verify text selection, keyboard focus, pointer release outside the board, trash highlighting, viewport shrink, reload recovery, and failure/retry at 1024 × 768. Inspect the console for unexpected errors.
-
-## Scope and tradeoffs
-
-This is a single-user, single-tab exercise. There is no authentication, real backend, multi-tab conflict resolution, undo history, infinite canvas, or mobile-specific interface. The complete agreed feature set was prioritized over the brief's suggested 3–4-hour timebox and six-hour submission cutoff. No application data is sent to an external server.
+This app supports one user in one tab. It has no real backend, authentication, multi-tab synchronization, or undo. It sends no note data to external servers.

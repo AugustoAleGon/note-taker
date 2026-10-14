@@ -446,7 +446,7 @@ test("editing and selecting text never moves a note; lost capture cancels resizi
       (window as unknown as { lastPointerId: number }).lastPointerId,
     ),
   );
-  // Releasing capture dispatches lostpointercapture before the next pointer event.
+  // Lost capture arrives before the next pointer event.
   await page.mouse.move(box.x + 110, box.y + 70);
   await page.mouse.up();
   expect(await geometry(note)).toEqual(before);

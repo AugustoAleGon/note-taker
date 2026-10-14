@@ -46,7 +46,6 @@ interface Options {
   timeoutMs?: number;
 }
 
-// One writer owns ordering, local recovery, and retries. React only submits snapshots.
 export function createPersistence(options: Options) {
   const { storage, transport, onLoad, onStatus } = options;
   let latest = options.initial.data;
