@@ -2,6 +2,10 @@
 
 A desktop sticky-note app built with React and TypeScript. It includes all four core features and all five bonuses from the exercise. The UI, dragging, and resizing use custom code.
 
+## Live demo
+
+[Open Little notes](https://note-taker-nu-wine.vercel.app/) to test the app without local setup. Use a desktop browser with a viewport of at least 1024 × 768.
+
 ## Run
 
 Use Node.js 22.12+ and pnpm 10.12.1. Development used Node.js 22.16.0.
